@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Client {
+  id                 String        @id @default(uuid())
+  name               String
+  phone              String?
+  telegram           String?
+  steamId            String?
+  externalId         String?
+  preferredCurrency  String        @default("USD")
+  verificationStatus String        @default("WATCH")
+  marketTier         String        @default("Retail")
+  notes              String?
+  totalSpent         Float         @default(0.0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  lastSeenAt         DateTime?
+  transactions       Transaction[]
+}
+
+model Transaction {
+  id            String   @id @default(uuid())
+  clientId      String
+  tradeId       String?
+  item          String
+  price         Float
+  marginUsd     Float    @default(0.0)
+  status        String   @default("COMPLETED") // COMPLETED, ESCROW, DISPUTED, PENDING, CANCELLED
+  rarity        String   @default("Mil-Spec")  // Mil-Spec, Restricted, Classified, Covert, Contraband
+  floatValue    Float?
+  paymentMethod String   @default("Card")
+  channel       String   @default("Telegram")
+  date          DateTime @default(now())
+  client        Client   @relation(fields: [clientId], references: [id])
+}

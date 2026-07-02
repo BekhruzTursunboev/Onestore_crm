@@ -1,0 +1,230 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+    --radius: 0.75rem;
+
+    --cs-bg: hsl(220 24% 4%);
+    --cs-bg-soft: hsl(220 20% 6%);
+    --cs-panel: hsl(220 18% 7% / 0.88);
+    --cs-panel-solid: hsl(220 18% 7%);
+    --cs-panel-raised: hsl(220 16% 10%);
+    --cs-panel-border: hsl(220 11% 18%);
+    --cs-panel-border-strong: hsl(220 10% 26%);
+    --cs-text-main: hsl(0 0% 98%);
+    --cs-text-soft: hsl(220 10% 72%);
+    --cs-text-muted: hsl(220 8% 52%);
+    --cs-accent: hsl(7 72% 56%);
+    --cs-accent-soft: hsl(7 72% 56% / 0.13);
+    --cs-success: hsl(158 58% 44%);
+    --cs-success-soft: hsl(158 58% 44% / 0.12);
+    --cs-warning: hsl(39 92% 58%);
+    --cs-warning-soft: hsl(39 92% 58% / 0.13);
+    --cs-danger: hsl(350 78% 58%);
+    --cs-danger-soft: hsl(350 78% 58% / 0.13);
+    --cs-info: hsl(210 78% 62%);
+    --cs-info-soft: hsl(210 78% 62% / 0.13);
+    --rarity-milspec: hsl(225 100% 65%);
+    --rarity-restricted: hsl(261 100% 70%);
+    --rarity-classified: hsl(292 75% 58%);
+    --rarity-covert: hsl(0 78% 61%);
+    --rarity-consumer: hsl(208 25% 72%);
+    --shadow-panel: 0 24px 70px hsl(220 25% 2% / 0.38), inset 0 1px 0 hsl(0 0% 100% / 0.04);
+    --cs-bg-gradient:
+      radial-gradient(circle at 84% 8%, hsl(7 72% 56% / 0.11), transparent 28rem),
+      linear-gradient(135deg, hsl(220 24% 4%) 0%, hsl(220 20% 6%) 58%, hsl(220 18% 4%) 100%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans text-[15px] md:text-base;
+    background-color: var(--cs-bg);
+    background-image: var(--cs-bg-gradient);
+    background-attachment: fixed;
+    font-feature-settings: "rlig" 1, "calt" 1, "tnum" 1;
+  }
+}
+
+.doppelrand {
+  @apply relative overflow-hidden rounded-[2rem] p-1.5;
+  background: linear-gradient(135deg, hsl(0 0% 100% / 0.08), hsl(0 0% 100% / 0.025));
+  box-shadow: inset 0 0 0 1px var(--cs-panel-border);
+}
+
+.doppelrand-inner {
+  @apply h-full w-full rounded-[calc(2rem-0.375rem)];
+  background: var(--cs-panel-solid);
+  box-shadow: var(--shadow-panel);
+}
+
+.focus-ring {
+  @apply outline-none focus-visible:ring-4;
+  --tw-ring-color: hsl(7 72% 56% / 0.24);
+}
+
+.custom-scrollbar {
+  scrollbar-color: hsl(220 10% 30%) transparent;
+  scrollbar-width: thin;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(220 10% 30%);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.btn-island {
+  @apply rounded-full px-6 py-3 bg-white/10 hover:bg-white/15 text-white transition-all duration-500 flex items-center justify-center font-medium active:scale-[0.98];
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.btn-island-icon {
+  @apply w-8 h-8 rounded-full bg-white/10 flex items-center justify-center transition-all duration-500;
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.btn-island:hover .btn-island-icon {
+  @apply translate-x-1 -translate-y-[1px] scale-105;
+}
+
+.crm-input {
+  @apply w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3.5 text-[15px] text-white outline-none transition-all duration-200 placeholder:text-white/30 focus:border-red-500/40 focus:bg-white/[0.07] focus:ring-4 focus:ring-red-500/10;
+}
+
+.crm-label {
+  @apply mb-2 block text-[11px] font-medium uppercase tracking-[0.16em] text-white/50;
+}
+
+.crm-select {
+  @apply w-full cursor-pointer rounded-2xl border border-white/10 bg-[#111] px-4 py-3.5 text-[15px] text-white outline-none transition-all duration-200 focus:border-red-500/40 focus:ring-4 focus:ring-red-500/10;
+}
+
+@keyframes giveaway-stream {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes winner-lock {
+  0% {
+    transform: scale(0.96);
+    opacity: 0.55;
+  }
+  55% {
+    transform: scale(1.035);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.giveaway-stream {
+  animation: giveaway-stream 18s linear infinite;
+}
+
+.winner-lock {
+  animation: winner-lock 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt !important;
+  }
+  
+  aside, 
+  nav, 
+  button, 
+  .print\:hidden,
+  input {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  .doppelrand {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+
+  .doppelrand-inner {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  h1, h2, h3, span, strong, td, th {
+    color: black !important;
+    text-shadow: none !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 15px !important;
+  }
+
+  th, td {
+    border-bottom: 1px solid #e2e8f0 !important;
+    color: black !important;
+    padding: 10px 6px !important;
+  }
+}
