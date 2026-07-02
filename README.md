@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OneStore CRM
 
-## Getting Started
+OneStore CRM is a Next.js CRM dashboard for CS2 skin buyers, transactions, profit tracking, invoice printing, and giveaway selection.
 
-First, run the development server:
+## Tech Stack
+
+- Next.js 16 App Router
+- React 19
+- Prisma 5
+- SQLite for local demo data
+- Tailwind CSS
+- Radix UI primitives
+
+## Local Setup
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create the local SQLite database and seed demo data:
+
+```bash
+npm run db:setup
+```
+
+Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Demo Pages
 
-## Learn More
+- `/` - dashboard command center
+- `/clients` - client list and CRM entry point
+- `/clients/[id]` - client profile, transaction history, and invoice print view
+- `/giveaway` - giveaway randomizer
 
-To learn more about Next.js, take a look at the following resources:
+## Quality Checks
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Run these before presenting or deploying:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run lint
+npm run build
+```
 
-## Deploy on Vercel
+Both commands should pass before the app is shown to someone else.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Database Notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The local SQLite database is generated at `prisma/dev.db`. It is intentionally ignored by Git so private demo data is not pushed to GitHub.
+
+If the app is cloned on a new machine, run `npm run db:setup` before `npm run dev`.
+
+Running `npm run db:seed` clears existing demo clients and transactions, then recreates seeded data.
