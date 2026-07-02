@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDemoClient } from '@/lib/demo-data';
+import { deleteDemoStoreClient, getDemoStoreClient, updateDemoStoreClient } from '@/lib/demo-store';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(
@@ -29,11 +29,11 @@ export async function GET(
     return NextResponse.json(clientWithComputedSpent);
   } catch (error) {
     console.error('Mijozni yuklash xatosi:', error);
-    const demoClient = getDemoClient(id);
+    const demoClient = getDemoStoreClient(id);
     if (demoClient) {
       return NextResponse.json(demoClient);
     }
-    return NextResponse.json({ error: "Mijozni yuklab bo'lmadi" }, { status: 500 });
+    return NextResponse.json({ error: 'Mijoz topilmadi' }, { status: 404 });
   }
 }
 
@@ -41,9 +41,16 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+  let body: Record<string, string | null | undefined>;
+
   try {
-    const { id } = await params;
-    const body = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "So'rov ma'lumoti noto'g'ri" }, { status: 400 });
+  }
+
+  try {
     const client = await prisma.client.update({
       where: { id },
       data: body,
@@ -52,7 +59,12 @@ export async function PUT(
     return NextResponse.json(client);
   } catch (error) {
     console.error('Mijozni yangilash xatosi:', error);
-    return NextResponse.json({ error: "Mijozni yangilab bo'lmadi" }, { status: 500 });
+    const fallbackClient = updateDemoStoreClient(id, body);
+    if (!fallbackClient) {
+      return NextResponse.json({ error: 'Mijoz topilmadi' }, { status: 404 });
+    }
+
+    return NextResponse.json(fallbackClient);
   }
 }
 
@@ -75,6 +87,12 @@ export async function DELETE(
     return NextResponse.json({ message: "Mijoz muvaffaqiyatli o'chirildi" });
   } catch (error) {
     console.error("Mijozni o'chirish xatosi:", error);
-    return NextResponse.json({ error: "Mijozni o'chirib bo'lmadi" }, { status: 500 });
+    const { id } = await params;
+
+    if (deleteDemoStoreClient(id)) {
+      return NextResponse.json({ message: "Mijoz muvaffaqiyatli o'chirildi" });
+    }
+
+    return NextResponse.json({ error: 'Mijoz topilmadi' }, { status: 404 });
   }
 }

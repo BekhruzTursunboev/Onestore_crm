@@ -1,5 +1,6 @@
 import GiveawayRandomizer from "./GiveawayRandomizer";
 import { demoClients } from "@/lib/demo-data";
+import { listDemoStoreClients } from "@/lib/demo-store";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,14 @@ export default async function GiveawayPage() {
     });
   } catch (error) {
     console.error("Giveaway database unavailable, rendering demo data:", error);
+    serializedClients = listDemoStoreClients().map((client) => ({
+      id: client.id,
+      name: client.name,
+      phone: client.phone,
+      telegram: client.telegram,
+      totalSpent: client.totalSpent,
+      transactions: client.transactions.map(({ id, price, item, status }) => ({ id, price, item, status })),
+    }));
   }
 
   return <GiveawayRandomizer clients={serializedClients} />;

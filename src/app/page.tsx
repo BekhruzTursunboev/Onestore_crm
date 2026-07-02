@@ -1,5 +1,6 @@
 import DashboardCommandCenter from "@/components/DashboardCommandCenter";
 import { dashboardTotals, demoClients, demoTrades } from "@/lib/demo-data";
+import { listDemoStoreClients, listDemoStoreTransactions } from "@/lib/demo-store";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -129,6 +130,8 @@ export default async function Dashboard() {
     }));
   } catch (error) {
     console.error("Dashboard database unavailable, rendering demo data:", error);
+    serializedClients = listDemoStoreClients().map(stripDashboardClientFields);
+    serializedTrades = listDemoStoreTransactions().map(stripDashboardTradeFields);
   }
 
   return (

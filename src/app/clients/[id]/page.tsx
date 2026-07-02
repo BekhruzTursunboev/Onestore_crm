@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import ClientDetailView from './ClientDetailView';
-import { getDemoClient } from '@/lib/demo-data';
+import { getDemoStoreClient } from '@/lib/demo-store';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -43,7 +43,7 @@ export default async function ClientDetailPage({
     };
   } catch (error) {
     console.error('Client detail database unavailable, rendering demo data:', error);
-    initialClient = getDemoClient(id);
+    initialClient = getDemoStoreClient(id);
   }
 
   if (!initialClient) {

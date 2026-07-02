@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { demoTrades } from '@/lib/demo-data';
+import {
+  createDemoStoreTransaction,
+  deleteDemoStoreTransaction,
+  listDemoStoreTransactions,
+} from '@/lib/demo-store';
 import { prisma } from '@/lib/prisma';
 
 export async function GET() {
@@ -16,59 +20,67 @@ export async function GET() {
     return NextResponse.json(transactions);
   } catch (error) {
     console.error('Savdolarni yuklash xatosi:', error);
-    return NextResponse.json(demoTrades);
+    return NextResponse.json(listDemoStoreTransactions());
   }
 }
 
 export async function POST(request: Request) {
+  let body: Record<string, string | number | null | undefined>;
+
   try {
-    const body = await request.json();
-    const {
-      clientId,
-      item,
-      price, // Sell Price
-      buyPrice, // Buy Price
-      tradeId,
-      status, // COMPLETED, ESCROW, PENDING, DISPUTED, CANCELLED
-      floatValue,
-    } = body;
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "So'rov ma'lumoti noto'g'ri" }, { status: 400 });
+  }
 
-    if (!clientId || !item || price === undefined || buyPrice === undefined) {
-      return NextResponse.json({ error: 'Mijoz, skin nomi, sotib olingan va sotilgan narxlar majburiy' }, { status: 400 });
-    }
+  const {
+    clientId,
+    item,
+    price, // Sell Price
+    buyPrice, // Buy Price
+    tradeId,
+    status, // COMPLETED, ESCROW, PENDING, DISPUTED, CANCELLED
+    floatValue,
+  } = body;
 
-    const priceFloat = parseFloat(price);
-    const buyPriceFloat = parseFloat(buyPrice);
-    if (!Number.isFinite(priceFloat) || priceFloat < 0 || !Number.isFinite(buyPriceFloat) || buyPriceFloat < 0) {
-      return NextResponse.json({ error: 'Narxlar to\'g\'ri kiritilishi kerak' }, { status: 400 });
-    }
+  if (!clientId || !item || price === undefined || buyPrice === undefined) {
+    return NextResponse.json({ error: 'Mijoz, skin nomi, sotib olingan va sotilgan narxlar majburiy' }, { status: 400 });
+  }
 
-    const marginUsd = priceFloat - buyPriceFloat;
+  const priceFloat = parseFloat(String(price));
+  const buyPriceFloat = parseFloat(String(buyPrice));
+  if (!Number.isFinite(priceFloat) || priceFloat < 0 || !Number.isFinite(buyPriceFloat) || buyPriceFloat < 0) {
+    return NextResponse.json({ error: 'Narxlar to\'g\'ri kiritilishi kerak' }, { status: 400 });
+  }
 
+  const marginUsd = priceFloat - buyPriceFloat;
+  const clientIdString = String(clientId);
+
+  try {
     const transaction = await prisma.transaction.create({
       data: {
-        clientId,
-        item,
+        clientId: clientIdString,
+        item: String(item),
         price: priceFloat,
         marginUsd,
-        tradeId: tradeId || null,
-        status: status || 'COMPLETED',
+        tradeId: tradeId ? String(tradeId) : null,
+        status: status ? String(status) : 'COMPLETED',
         rarity: 'Restricted',
         paymentMethod: 'Card',
         channel: 'CRM',
-        floatValue: floatValue ? parseFloat(floatValue) : null,
+        floatValue: floatValue ? parseFloat(String(floatValue)) : null,
       },
     });
 
     // Update client totalSpent
     const completedTransactions = await prisma.transaction.findMany({
-      where: { clientId, status: 'COMPLETED' },
+      where: { clientId: clientIdString, status: 'COMPLETED' },
       select: { price: true },
     });
     const totalSpent = completedTransactions.reduce((sum, tx) => sum + tx.price, 0);
 
     await prisma.client.update({
-      where: { id: clientId },
+      where: { id: clientIdString },
       data: {
         totalSpent,
         lastSeenAt: new Date(),
@@ -78,17 +90,29 @@ export async function POST(request: Request) {
     return NextResponse.json(transaction, { status: 201 });
   } catch (error) {
     console.error('Savdo yaratish xatosi:', error);
-    return NextResponse.json(
-      { error: "Online demo ma'lumotlar bazasi sozlanmagan. Postgres DATABASE_URL qo'shing." },
-      { status: 503 },
-    );
+    const fallbackTransaction = createDemoStoreTransaction({
+      ...body,
+      clientId: clientIdString,
+      item: String(item),
+      price: priceFloat,
+      buyPrice: buyPriceFloat,
+      status: status ? String(status) : undefined,
+    });
+
+    if (!fallbackTransaction) {
+      return NextResponse.json({ error: 'Mijoz topilmadi' }, { status: 404 });
+    }
+
+    return NextResponse.json(fallbackTransaction, { status: 201 });
   }
 }
 
 export async function DELETE(request: Request) {
+  let id: string | undefined;
+
   try {
     const body = await request.json();
-    const { id } = body;
+    id = typeof body.id === 'string' ? body.id : undefined;
     if (!id) {
       return NextResponse.json({ error: 'Tranzaksiya ID majburiy' }, { status: 400 });
     }
@@ -126,9 +150,10 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Savdo o\'chirish xatosi:', error);
-    return NextResponse.json(
-      { error: "Tranzaksiyani o'chirib bo'lmadi. Ma'lumotlar bazasi xatosi." },
-      { status: 500 },
-    );
+    if (id && deleteDemoStoreTransaction(id)) {
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ error: "Tranzaksiya topilmadi" }, { status: 404 });
   }
 }

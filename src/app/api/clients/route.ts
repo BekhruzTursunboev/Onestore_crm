@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { demoClients } from '@/lib/demo-data';
+import { createDemoStoreClient, listDemoStoreClients } from '@/lib/demo-store';
 import { prisma } from '@/lib/prisma';
 
 export async function GET() {
@@ -30,7 +30,7 @@ export async function GET() {
   } catch (error) {
     console.error('Mijozlarni yuklash xatosi:', error);
     return NextResponse.json(
-      demoClients.map((client) => ({
+      listDemoStoreClients().map((client) => ({
         ...client,
         lastTrade: client.transactions[0]?.date ?? client.lastSeenAt ?? client.updatedAt,
       })),
@@ -39,60 +39,67 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  let body: Record<string, string | number | null | undefined>;
+
   try {
-    const body = await request.json();
-    const {
-      name,
-      phone,
-      telegram,
-      steamId,
-      externalId,
-      notes,
-      item,
-      price,
-      buyPrice,
-      tradeId,
-      marginUsd,
-      floatValue,
-    } = body;
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "So'rov ma'lumoti noto'g'ri" }, { status: 400 });
+  }
 
-    if (!name) {
-      return NextResponse.json({ error: 'Mijoz ismi majburiy' }, { status: 400 });
-    }
+  const {
+    name,
+    phone,
+    telegram,
+    steamId,
+    externalId,
+    notes,
+    item,
+    price,
+    buyPrice,
+    tradeId,
+    marginUsd,
+    floatValue,
+  } = body;
 
-    const hasInitialTrade = Boolean(item || price);
-    const priceFloat = hasInitialTrade ? parseFloat(price) : 0;
-    const buyPriceFloat = hasInitialTrade && buyPrice ? parseFloat(buyPrice) : 0;
+  if (typeof name !== 'string' || !name.trim()) {
+    return NextResponse.json({ error: 'Mijoz ismi majburiy' }, { status: 400 });
+  }
 
-    if (hasInitialTrade && (!item || price === undefined || !Number.isFinite(priceFloat) || priceFloat < 0)) {
-      return NextResponse.json({ error: "Skin va narx to'g'ri kiritilishi kerak" }, { status: 400 });
-    }
+  const hasInitialTrade = Boolean(item || price);
+  const priceFloat = hasInitialTrade ? parseFloat(String(price)) : 0;
+  const buyPriceFloat = hasInitialTrade && buyPrice ? parseFloat(String(buyPrice)) : 0;
 
+  if (hasInitialTrade && (!item || price === undefined || !Number.isFinite(priceFloat) || priceFloat < 0)) {
+    return NextResponse.json({ error: "Skin va narx to'g'ri kiritilishi kerak" }, { status: 400 });
+  }
+
+  try {
     const client = await prisma.client.create({
       data: {
         name,
-        phone: phone || null,
-        telegram: telegram || null,
-        steamId: steamId || null,
-        externalId: externalId || null,
+        phone: phone ? String(phone) : null,
+        telegram: telegram ? String(telegram) : null,
+        steamId: steamId ? String(steamId) : null,
+        externalId: externalId ? String(externalId) : null,
         marketTier: 'Standard',
         verificationStatus: 'WATCH',
-        notes: notes || null,
+        notes: notes ? String(notes) : null,
         totalSpent: priceFloat,
         lastSeenAt: new Date(),
         ...(hasInitialTrade
           ? {
               transactions: {
                 create: {
-                  item,
+                  item: String(item),
                   price: priceFloat,
-                  tradeId: tradeId || null,
+                  tradeId: tradeId ? String(tradeId) : null,
                   status: 'COMPLETED',
                   rarity: 'Restricted',
                   paymentMethod: 'Card',
                   channel: 'CRM',
-                  marginUsd: marginUsd ? parseFloat(marginUsd) : (priceFloat - buyPriceFloat),
-                  floatValue: floatValue ? parseFloat(floatValue) : null,
+                  marginUsd: marginUsd ? parseFloat(String(marginUsd)) : (priceFloat - buyPriceFloat),
+                  floatValue: floatValue ? parseFloat(String(floatValue)) : null,
                 },
               },
             }
@@ -106,9 +113,6 @@ export async function POST(request: Request) {
     return NextResponse.json(client, { status: 201 });
   } catch (error) {
     console.error('Mijoz yaratish xatosi:', error);
-    return NextResponse.json(
-      { error: "Online demo ma'lumotlar bazasi sozlanmagan. Postgres DATABASE_URL qo'shing." },
-      { status: 503 },
-    );
+    return NextResponse.json(createDemoStoreClient({ ...body, name }), { status: 201 });
   }
 }

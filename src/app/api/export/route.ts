@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { demoTrades } from '@/lib/demo-data';
+import { listDemoStoreTransactions } from '@/lib/demo-store';
 import { prisma } from '@/lib/prisma';
 
 const headers = [
@@ -85,7 +85,7 @@ export async function GET() {
     return csvResponse(rows);
   } catch (error) {
     console.error('Savdolarni eksport qilish xatosi:', error);
-    const rows = demoTrades.map((tx) => {
+    const rows = listDemoStoreTransactions().map((tx) => {
       const marginUsd = tx.marginUsd || 0;
       const buyPrice = tx.price - marginUsd;
 
