@@ -12,6 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { persistBrowserDemoClient } from "@/lib/browser-demo-store";
 
 type AddClientFormProps = {
   onCreated?: () => void;
@@ -46,6 +47,7 @@ export default function AddClientForm({ onCreated }: AddClientFormProps) {
         throw new Error(data.error || "Mijoz saqlanmadi");
       }
 
+      persistBrowserDemoClient(data);
       form.reset();
       setSaved(true);
       onCreated?.();

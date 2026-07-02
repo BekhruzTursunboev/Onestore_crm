@@ -89,7 +89,7 @@ export async function DELETE(
     console.error("Mijozni o'chirish xatosi:", error);
     const { id } = await params;
 
-    if (deleteDemoStoreClient(id)) {
+    if (deleteDemoStoreClient(id) || id.startsWith('demo-client-')) {
       return NextResponse.json({ message: "Mijoz muvaffaqiyatli o'chirildi" });
     }
 

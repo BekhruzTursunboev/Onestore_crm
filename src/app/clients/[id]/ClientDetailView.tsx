@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowUpRight, Loader2, Plus, Printer, Trash2 } from 'lucide-react';
@@ -13,6 +13,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  getBrowserDemoClient,
+  persistBrowserDemoTransaction,
+  removeBrowserDemoClient,
+  removeBrowserDemoTransaction,
+  subscribeBrowserDemoStore,
+} from "@/lib/browser-demo-store";
 
 type Transaction = {
   id: string;
@@ -46,9 +53,38 @@ const statusLabels: Record<string, string> = {
   CANCELLED: "Bekor qilingan",
 };
 
+function formValue(payload: Record<string, FormDataEntryValue>, key: string) {
+  const value = payload[key];
+  return typeof value === "string" ? value : "";
+}
+
+function localTransactionFromPayload(clientId: string, payload: Record<string, FormDataEntryValue>) {
+  const price = Number.parseFloat(formValue(payload, "price"));
+  const buyPrice = Number.parseFloat(formValue(payload, "buyPrice"));
+  const floatValue = Number.parseFloat(formValue(payload, "floatValue"));
+
+  return {
+    clientId,
+    item: formValue(payload, "item"),
+    price: Number.isFinite(price) ? price : 0,
+    marginUsd: Number.isFinite(price) && Number.isFinite(buyPrice) ? price - buyPrice : 0,
+    status: formValue(payload, "status") || "COMPLETED",
+    tradeId: formValue(payload, "tradeId") || null,
+    floatValue: Number.isFinite(floatValue) ? floatValue : null,
+    rarity: "Restricted",
+    paymentMethod: "Card",
+    channel: "CRM",
+    date: new Date().toISOString(),
+  };
+}
+
 async function fetchClient(clientId: string) {
   const res = await fetch(`/api/clients/${clientId}`);
-  if (!res.ok) throw new Error('Mijoz yuklanmadi');
+  if (!res.ok) {
+    const localClient = getBrowserDemoClient(clientId);
+    if (localClient) return localClient;
+    throw new Error('Mijoz yuklanmadi');
+  }
   return res.json() as Promise<ClientData>;
 }
 
@@ -66,6 +102,18 @@ export default function ClientDetailView({
   const [modalOpen, setModalOpen] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+
+  useEffect(() => {
+    const syncClient = () => {
+      const localClient = getBrowserDemoClient(clientId);
+      if (localClient) {
+        setClient(localClient);
+      }
+    };
+
+    syncClient();
+    return subscribeBrowserDemoStore(syncClient);
+  }, [clientId]);
 
   async function handleAddTransaction(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,15 +133,22 @@ export default function ClientDetailView({
         }),
         headers: { "Content-Type": "application/json" },
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      let syncedClient = null;
 
       if (!res.ok) {
-        throw new Error(data.error || "Savdo saqlanmadi");
+        if (!getBrowserDemoClient(clientId)) {
+          throw new Error(data.error || "Savdo saqlanmadi");
+        }
+
+        syncedClient = persistBrowserDemoTransaction(clientId, localTransactionFromPayload(clientId, payload), client);
+      } else {
+        syncedClient = persistBrowserDemoTransaction(clientId, data, client);
       }
 
       form.reset();
       setModalOpen(false);
-      setClient(await fetchClient(clientId));
+      setClient(syncedClient ?? await fetchClient(clientId));
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Xatolik yuz berdi");
     } finally {
@@ -116,6 +171,7 @@ export default function ClientDetailView({
         throw new Error(data.error || "Mijozni o‘chirib bo‘lmadi");
       }
 
+      removeBrowserDemoClient(clientId);
       router.push("/clients");
     } catch (err) {
       alert(err instanceof Error ? err.message : "Xatolik yuz berdi");
@@ -139,7 +195,8 @@ export default function ClientDetailView({
         throw new Error(data.error || "Savdo o‘chirilmadi");
       }
 
-      setClient(await fetchClient(clientId));
+      removeBrowserDemoTransaction(txId);
+      setClient(getBrowserDemoClient(clientId) ?? await fetchClient(clientId));
     } catch (err) {
       alert(err instanceof Error ? err.message : "Xatolik yuz berdi");
     }

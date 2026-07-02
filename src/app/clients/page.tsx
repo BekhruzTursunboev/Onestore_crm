@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import AddClientForm from "./AddClientForm";
+import { mergeBrowserDemoClients, subscribeBrowserDemoStore } from "@/lib/browser-demo-store";
 
 interface Client {
   id: string;
@@ -36,7 +37,7 @@ export default function ClientsPage() {
       const res = await fetch("/api/clients");
       if (!res.ok) throw new Error("Mijozlar yuklanmadi");
       const data = await res.json();
-      setClients(data);
+      setClients(mergeBrowserDemoClients(data));
     } catch {
       setError("Mijozlar bazasi yuklanmadi. Sahifani yangilang.");
     } finally {
@@ -49,7 +50,14 @@ export default function ClientsPage() {
       void loadClients();
     }, 0);
 
-    return () => window.clearTimeout(timer);
+    const unsubscribe = subscribeBrowserDemoStore(() => {
+      void loadClients();
+    });
+
+    return () => {
+      window.clearTimeout(timer);
+      unsubscribe();
+    };
   }, [loadClients]);
 
   const filteredClients = useMemo(() => {

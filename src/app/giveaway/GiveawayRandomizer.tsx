@@ -15,6 +15,7 @@ import {
   Volume2, 
   VolumeX
 } from "lucide-react";
+import { mergeBrowserDemoClients, subscribeBrowserDemoStore } from "@/lib/browser-demo-store";
 
 type GiveawayClient = {
   id: string;
@@ -259,6 +260,7 @@ function pickWeightedClient(pool: GiveawayClient[]) {
 }
 
 export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps) {
+  const [displayClients, setDisplayClients] = useState<GiveawayClient[]>(clients);
   const [winner, setWinner] = useState<GiveawayClient | null>(null);
   const [rollCount, setRollCount] = useState(0);
   
@@ -291,6 +293,15 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
   const winnerRef = useRef<GiveawayClient | null>(null);
   const reelCardsRef = useRef<GiveawayClient[]>([]);
 
+  useEffect(() => {
+    const syncClients = () => {
+      setDisplayClients(mergeBrowserDemoClients(clients));
+    };
+
+    syncClients();
+    return subscribeBrowserDemoStore(syncClients);
+  }, [clients]);
+
   // Load configs from local storage
   useEffect(() => {
     const savedSound = localStorage.getItem("giveaway_sound_enabled");
@@ -308,8 +319,8 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
   };
 
   const eligibleClients = useMemo(
-    () => clients.filter((client) => client.transactions.some((trade) => trade.status === "COMPLETED")),
-    [clients],
+    () => displayClients.filter((client) => client.transactions.some((trade) => trade.status === "COMPLETED")),
+    [displayClients],
   );
 
   const totalTickets = useMemo(

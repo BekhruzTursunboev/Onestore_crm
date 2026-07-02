@@ -47,7 +47,20 @@ export default async function ClientDetailPage({
   }
 
   if (!initialClient) {
-    notFound();
+    if (!id.startsWith('demo-client-')) {
+      notFound();
+    }
+
+    const createdAt = new Date().toISOString();
+    initialClient = {
+      id,
+      name: 'Mijoz yuklanmoqda',
+      phone: null,
+      telegram: null,
+      totalSpent: 0,
+      createdAt,
+      transactions: [],
+    };
   }
 
   return <ClientDetailView clientId={id} initialClient={initialClient} />;

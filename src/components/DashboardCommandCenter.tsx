@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -31,6 +31,11 @@ import {
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  mergeBrowserDemoClients,
+  mergeBrowserDemoTrades,
+  subscribeBrowserDemoStore,
+} from "@/lib/browser-demo-store";
 
 type Trade = {
   id: string;
@@ -145,12 +150,53 @@ function chartDateLabel(value: string) {
   return `${String(date.getUTCDate()).padStart(2, "0")} ${months[date.getUTCMonth()]}`;
 }
 
-export default function DashboardCommandCenter({ clients, trades, generatedAtLabel, totals }: DashboardProps) {
+function calculateTotals(trades: Array<{ status: string; price: number; marginUsd: number }>) {
+  const completedTrades = trades.filter((trade) => trade.status === "COMPLETED");
+  const revenue = completedTrades.reduce((sum, trade) => sum + trade.price, 0);
+  const margin = completedTrades.reduce((sum, trade) => sum + trade.marginUsd, 0);
+  const completed = completedTrades.length;
+  const escrow = trades.filter((trade) => trade.status === "ESCROW" || trade.status === "PENDING").length;
+  const disputed = trades.filter((trade) => trade.status === "DISPUTED").length;
+
+  return {
+    revenue,
+    margin,
+    completed,
+    escrow,
+    disputed,
+    averageOrder: completed > 0 ? revenue / completed : 0,
+  };
+}
+
+export default function DashboardCommandCenter({
+  clients: initialClients,
+  trades: initialTrades,
+  generatedAtLabel,
+  totals: initialTotals,
+}: DashboardProps) {
+  const [displayClients, setDisplayClients] = useState<Client[]>(initialClients);
+  const [displayTrades, setDisplayTrades] = useState<Trade[]>(initialTrades);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [priorityFilter, setPriorityFilter] = useState("ALL");
   const [sortMode, setSortMode] = useState("newest");
   const router = useRouter();
+  const clients = displayClients;
+  const trades = displayTrades;
+  const totals = useMemo(
+    () => (displayTrades === initialTrades ? initialTotals : calculateTotals(displayTrades)),
+    [displayTrades, initialTotals, initialTrades],
+  );
+
+  useEffect(() => {
+    const syncDashboard = () => {
+      setDisplayClients(mergeBrowserDemoClients(initialClients) as Client[]);
+      setDisplayTrades(mergeBrowserDemoTrades(initialTrades) as Trade[]);
+    };
+
+    syncDashboard();
+    return subscribeBrowserDemoStore(syncDashboard);
+  }, [initialClients, initialTrades]);
 
   const filteredTrades = useMemo(() => {
     const normalized = query.trim().toLowerCase();

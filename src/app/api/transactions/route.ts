@@ -150,7 +150,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Savdo o\'chirish xatosi:', error);
-    if (id && deleteDemoStoreTransaction(id)) {
+    if (id && (deleteDemoStoreTransaction(id) || id.startsWith('demo-tx-'))) {
       return NextResponse.json({ success: true });
     }
 
