@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { demoClients } from '@/lib/demo-data';
 import { prisma } from '@/lib/prisma';
 
 export async function GET() {
@@ -28,7 +29,12 @@ export async function GET() {
     return NextResponse.json(enrichedClients);
   } catch (error) {
     console.error('Mijozlarni yuklash xatosi:', error);
-    return NextResponse.json({ error: "Mijozlarni yuklab bo'lmadi" }, { status: 500 });
+    return NextResponse.json(
+      demoClients.map((client) => ({
+        ...client,
+        lastTrade: client.transactions[0]?.date ?? client.lastSeenAt ?? client.updatedAt,
+      })),
+    );
   }
 }
 
@@ -105,6 +111,9 @@ export async function POST(request: Request) {
     return NextResponse.json(client, { status: 201 });
   } catch (error) {
     console.error('Mijoz yaratish xatosi:', error);
-    return NextResponse.json({ error: "Mijozni yaratib bo'lmadi" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Online demo ma'lumotlar bazasi sozlanmagan. Postgres DATABASE_URL qo'shing." },
+      { status: 503 },
+    );
   }
 }

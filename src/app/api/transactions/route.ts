@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { demoTrades } from '@/lib/demo-data';
 import { prisma } from '@/lib/prisma';
 
 export async function GET() {
@@ -15,7 +16,7 @@ export async function GET() {
     return NextResponse.json(transactions);
   } catch (error) {
     console.error('Savdolarni yuklash xatosi:', error);
-    return NextResponse.json({ error: "Savdolarni yuklab bo'lmadi" }, { status: 500 });
+    return NextResponse.json(demoTrades);
   }
 }
 
@@ -80,6 +81,9 @@ export async function POST(request: Request) {
     return NextResponse.json(transaction, { status: 201 });
   } catch (error) {
     console.error('Savdo yaratish xatosi:', error);
-    return NextResponse.json({ error: "Savdoni saqlab bo'lmadi" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Online demo ma'lumotlar bazasi sozlanmagan. Postgres DATABASE_URL qo'shing." },
+      { status: 503 },
+    );
   }
 }

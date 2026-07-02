@@ -1,7 +1,39 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { demoTrades } from '@/lib/demo-data';
+import { prisma } from '@/lib/prisma';
 
-const prisma = new PrismaClient();
+const headers = [
+  'savdo_id',
+  'mijoz',
+  'steam_id',
+  'telegram',
+  'telefon',
+  'skin',
+  'summa_usd',
+  'holat',
+  'sana',
+];
+
+function csvResponse(rows: string[]) {
+  const csvContent = [headers.join(','), ...rows].join('\n');
+
+  return new NextResponse(`${csvContent}\n`, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="savdolar.csv"',
+    },
+  });
+}
+
+function escapeCsvValue(value: unknown) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
 
 export async function GET() {
   try {
@@ -21,26 +53,8 @@ export async function GET() {
       },
     });
 
-    const headers = [
-      'savdo_id',
-      'mijoz',
-      'steam_id',
-      'telegram',
-      'telefon',
-      'skin',
-      'summa_usd',
-      'holat',
-      'sana',
-    ];
-
     if (!transactions || transactions.length === 0) {
-      return new NextResponse(`${headers.join(',')}\n`, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': 'attachment; filename="savdolar.csv"',
-        },
-      });
+      return csvResponse([]);
     }
 
     const rows = transactions.map((tx) =>
@@ -55,28 +69,29 @@ export async function GET() {
         tx.status,
         tx.date.toISOString(),
       ]
-        .map((val) => {
-          if (val === null || val === undefined) return '';
-          const str = String(val);
-          if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-            return `"${str.replace(/"/g, '""')}"`;
-          }
-          return str;
-        })
+        .map(escapeCsvValue)
         .join(',')
     );
 
-    const csvContent = [headers.join(','), ...rows].join('\n');
-
-    return new NextResponse(csvContent, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="savdolar.csv"',
-      },
-    });
+    return csvResponse(rows);
   } catch (error) {
     console.error('Savdolarni eksport qilish xatosi:', error);
-    return NextResponse.json({ error: 'Ichki server xatosi' }, { status: 500 });
+    const rows = demoTrades.map((tx) =>
+      [
+        tx.id,
+        tx.client.name,
+        tx.client.steamId,
+        tx.client.telegram,
+        tx.client.phone,
+        tx.item,
+        tx.price,
+        tx.status,
+        tx.date,
+      ]
+        .map(escapeCsvValue)
+        .join(',')
+    );
+
+    return csvResponse(rows);
   }
 }

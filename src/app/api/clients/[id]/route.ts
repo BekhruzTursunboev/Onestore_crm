@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
+import { getDemoClient } from '@/lib/demo-data';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
   try {
-    const { id } = await params;
     const client = await prisma.client.findUnique({
       where: { id },
       include: {
@@ -27,6 +29,10 @@ export async function GET(
     return NextResponse.json(clientWithComputedSpent);
   } catch (error) {
     console.error('Mijozni yuklash xatosi:', error);
+    const demoClient = getDemoClient(id);
+    if (demoClient) {
+      return NextResponse.json(demoClient);
+    }
     return NextResponse.json({ error: "Mijozni yuklab bo'lmadi" }, { status: 500 });
   }
 }
