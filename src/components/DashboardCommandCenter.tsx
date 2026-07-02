@@ -51,8 +51,6 @@ type Trade = {
     telegram: string | null;
     phone: string | null;
     steamId: string | null;
-    verificationStatus: string;
-    marketTier: string;
   };
 };
 
@@ -63,8 +61,6 @@ type Client = {
   telegram: string | null;
   steamId: string | null;
   externalId: string | null;
-  verificationStatus: string;
-  marketTier: string;
   notes: string | null;
   totalSpent: number;
   createdAt: string;

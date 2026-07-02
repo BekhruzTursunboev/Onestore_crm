@@ -4,12 +4,15 @@ import { prisma } from '@/lib/prisma';
 
 const headers = [
   'savdo_id',
+  'savdo_kodi',
   'mijoz',
   'steam_id',
   'telegram',
   'telefon',
   'skin',
   'summa_usd',
+  'tannarx_usd',
+  'sof_foyda_usd',
   'holat',
   'sana',
 ];
@@ -57,40 +60,52 @@ export async function GET() {
       return csvResponse([]);
     }
 
-    const rows = transactions.map((tx) =>
-      [
+    const rows = transactions.map((tx) => {
+      const marginUsd = tx.marginUsd || 0;
+      const buyPrice = tx.price - marginUsd;
+      
+      return [
         tx.id,
+        tx.tradeId,
         tx.client?.name,
         tx.client?.steamId,
         tx.client?.telegram,
         tx.client?.phone,
         tx.item,
         tx.price,
+        buyPrice,
+        marginUsd,
         tx.status,
         tx.date.toISOString(),
       ]
         .map(escapeCsvValue)
-        .join(',')
-    );
+        .join(',');
+    });
 
     return csvResponse(rows);
   } catch (error) {
     console.error('Savdolarni eksport qilish xatosi:', error);
-    const rows = demoTrades.map((tx) =>
-      [
+    const rows = demoTrades.map((tx) => {
+      const marginUsd = tx.marginUsd || 0;
+      const buyPrice = tx.price - marginUsd;
+
+      return [
         tx.id,
+        tx.tradeId,
         tx.client.name,
         tx.client.steamId,
         tx.client.telegram,
         tx.client.phone,
         tx.item,
         tx.price,
+        buyPrice,
+        marginUsd,
         tx.status,
         tx.date,
       ]
         .map(escapeCsvValue)
-        .join(',')
-    );
+        .join(',');
+    });
 
     return csvResponse(rows);
   }

@@ -35,8 +35,6 @@ type ClientData = {
   telegram: string | null;
   totalSpent: number;
   createdAt: string;
-  marketTier: string;
-  verificationStatus: string;
   transactions: Transaction[];
 };
 
@@ -274,10 +272,6 @@ export default function ClientDetailView({
                 Mijoz Ma‘lumotnomasi
               </div>
               <h1 className="text-5xl font-semibold tracking-tighter text-white print:text-black print:text-4xl">{client.name}</h1>
-              <div className="flex gap-2 mt-3 print:hidden">
-                <span className="text-[10px] border border-white/10 px-2 py-0.5 rounded text-white/40">{client.marketTier}</span>
-                <span className="text-[10px] border border-white/10 px-2 py-0.5 rounded text-white/40">{client.verificationStatus}</span>
-              </div>
             </div>
             
             <div className="flex gap-12 print:gap-8">

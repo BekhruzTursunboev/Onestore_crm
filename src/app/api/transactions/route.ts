@@ -8,7 +8,7 @@ export async function GET() {
       orderBy: { date: 'desc' },
       include: {
         client: {
-          select: { name: true, telegram: true, steamId: true, verificationStatus: true }
+          select: { name: true, telegram: true, steamId: true }
         }
       },
       take: 80,

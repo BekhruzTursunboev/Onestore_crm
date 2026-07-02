@@ -21,8 +21,6 @@ export type DemoClient = {
   steamId: string | null;
   externalId: string | null;
   preferredCurrency: string;
-  verificationStatus: string;
-  marketTier: string;
   notes: string | null;
   totalSpent: number;
   createdAt: string;
@@ -40,10 +38,8 @@ export const demoClients: DemoClient[] = [
     phone: "+998 90 123 45 67",
     telegram: "@s1mple_cs2",
     steamId: "STEAM_1:0:7999999",
-    externalId: "VIP-001",
+    externalId: "CRM-001",
     preferredCurrency: "USD",
-    verificationStatus: "VERIFIED",
-    marketTier: "VIP",
     notes: "High-value collector. Prefers AWP and knife skins.",
     totalSpent: 18150,
     createdAt: "2026-06-18T08:20:00.000Z",
@@ -86,10 +82,8 @@ export const demoClients: DemoClient[] = [
     phone: "+998 91 777 66 55",
     telegram: "@zywoo_god",
     steamId: "STEAM_1:1:7000001",
-    externalId: "VIP-002",
+    externalId: "CRM-002",
     preferredCurrency: "USD",
-    verificationStatus: "WATCH",
-    marketTier: "Premium",
     notes: "Usually buys classified rifles and gloves.",
     totalSpent: 7925,
     createdAt: "2026-06-20T11:05:00.000Z",
@@ -132,10 +126,8 @@ export const demoClients: DemoClient[] = [
     phone: null,
     telegram: "@niko_g2",
     steamId: "STEAM_1:0:7000002",
-    externalId: "RET-104",
+    externalId: "CRM-003",
     preferredCurrency: "USD",
-    verificationStatus: "REVIEW",
-    marketTier: "Retail",
     notes: "New customer. Keep under manual review until second payout clears.",
     totalSpent: 2870,
     createdAt: "2026-06-24T09:35:00.000Z",
@@ -164,10 +156,8 @@ export const demoClients: DemoClient[] = [
     phone: "+998 93 444 22 11",
     telegram: "@m0nesy_sniper",
     steamId: "STEAM_1:1:7000003",
-    externalId: "RET-118",
+    externalId: "CRM-004",
     preferredCurrency: "USD",
-    verificationStatus: "VERIFIED",
-    marketTier: "Premium",
     notes: "Fast repeat buyer, prefers Telegram confirmations.",
     totalSpent: 4300,
     createdAt: "2026-06-21T12:00:00.000Z",
@@ -202,8 +192,6 @@ export const demoTrades = demoClients
         telegram: client.telegram,
         phone: client.phone,
         steamId: client.steamId,
-        verificationStatus: client.verificationStatus,
-        marketTier: client.marketTier,
       },
     })),
   )
@@ -213,7 +201,7 @@ export function getDemoClient(id: string) {
   return demoClients.find((client) => client.id === id) ?? null;
 }
 
-export function dashboardTotals(trades = demoTrades) {
+export function dashboardTotals(trades: Array<{ status: string; price: number; marginUsd: number }> = demoTrades) {
   const completedTrades = trades.filter((trade) => trade.status === "COMPLETED");
   const revenue = completedTrades.reduce((sum, trade) => sum + trade.price, 0);
   const margin = completedTrades.reduce((sum, trade) => sum + trade.marginUsd, 0);

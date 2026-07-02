@@ -8,9 +8,77 @@ function serializeDate(date: Date | null | undefined) {
   return date ? date.toISOString() : null;
 }
 
+type DashboardClient = {
+  id: string;
+  name: string;
+  phone: string | null;
+  telegram: string | null;
+  steamId: string | null;
+  externalId: string | null;
+  notes: string | null;
+  totalSpent: number;
+  createdAt: string;
+  updatedAt: string;
+  lastSeenAt: string | null;
+  transactions: Array<{
+    id: string;
+    clientId: string;
+    tradeId: string | null;
+    item: string;
+    price: number;
+    marginUsd: number;
+    status: string;
+    rarity: string;
+    floatValue: number | null;
+    paymentMethod: string;
+    channel: string;
+    date: string;
+  }>;
+};
+
+type DashboardTrade = DashboardClient["transactions"][number] & {
+  client: {
+    id: string;
+    name: string;
+    telegram: string | null;
+    phone: string | null;
+    steamId: string | null;
+  };
+};
+
+function stripDashboardClientFields(client: (typeof demoClients)[number]): DashboardClient {
+  return {
+    id: client.id,
+    name: client.name,
+    phone: client.phone,
+    telegram: client.telegram,
+    steamId: client.steamId,
+    externalId: client.externalId,
+    notes: client.notes,
+    totalSpent: client.totalSpent,
+    createdAt: client.createdAt,
+    updatedAt: client.updatedAt,
+    lastSeenAt: client.lastSeenAt,
+    transactions: client.transactions,
+  };
+}
+
+function stripDashboardTradeFields(trade: (typeof demoTrades)[number]): DashboardTrade {
+  return {
+    ...trade,
+    client: {
+      id: trade.client.id,
+      name: trade.client.name,
+      telegram: trade.client.telegram,
+      phone: trade.client.phone,
+      steamId: trade.client.steamId,
+    },
+  };
+}
+
 export default async function Dashboard() {
-  let serializedClients = demoClients;
-  let serializedTrades = demoTrades;
+  let serializedClients: DashboardClient[] = demoClients.map(stripDashboardClientFields);
+  let serializedTrades: DashboardTrade[] = demoTrades.map(stripDashboardTradeFields);
 
   try {
     const [clients, trades] = await Promise.all([
@@ -57,8 +125,6 @@ export default async function Dashboard() {
         telegram: trade.client.telegram,
         phone: trade.client.phone,
         steamId: trade.client.steamId,
-        verificationStatus: trade.client.verificationStatus,
-        marketTier: trade.client.marketTier,
       },
     }));
   } catch (error) {

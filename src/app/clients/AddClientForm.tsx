@@ -17,13 +17,6 @@ type AddClientFormProps = {
   onCreated?: () => void;
 };
 
-const marketTiers = [
-  { value: "Retail", label: "Chakana" },
-  { value: "Collector", label: "Kolleksioner" },
-  { value: "VIP", label: "VIP" },
-  { value: "Reseller", label: "Qayta sotuvchi" },
-];
-
 export default function AddClientForm({ onCreated }: AddClientFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -108,16 +101,6 @@ export default function AddClientForm({ onCreated }: AddClientFormProps) {
               <input className="crm-input" name="steamId" placeholder="7656119..." />
             </label>
 
-            <label>
-              <span className="crm-label">Daraja</span>
-              <select className="crm-select" defaultValue="Retail" name="marketTier">
-                {marketTiers.map((tier) => (
-                  <option key={tier.value} value={tier.value}>
-                    {tier.label}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
 
           <div className="my-6 h-px bg-white/10" />
