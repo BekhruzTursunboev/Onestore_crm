@@ -62,6 +62,12 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+
+    // First delete client's transactions to maintain database integrity
+    await prisma.transaction.deleteMany({
+      where: { clientId: id },
+    });
+
     await prisma.client.delete({
       where: { id },
     });

@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, Loader2, Plus, Printer } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, ArrowUpRight, Loader2, Plus, Printer, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -61,6 +62,7 @@ export default function ClientDetailView({
   initialClient: ClientData;
 }) {
   const [client, setClient] = useState(initialClient);
+  const router = useRouter();
 
   // Transaction Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -101,6 +103,50 @@ export default function ClientDetailView({
     }
   }
 
+  async function handleDeleteClient() {
+    if (typeof window !== "undefined" && !window.confirm("Haqiqatan ham ushbu mijozni butunlay o‘chirishni xohlaysizmi? Uning barcha tranzaksiyalari ham o‘chiriladi. Bu amalni ortga qaytarib bo‘lmaydi.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Mijozni o‘chirib bo‘lmadi");
+      }
+
+      router.push("/clients");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Xatolik yuz berdi");
+    }
+  }
+
+  async function handleDeleteTransaction(txId: string) {
+    if (typeof window !== "undefined" && !window.confirm("Haqiqatan ham ushbu savdoni o‘chirishni xohlaysizmi? Bu amalni ortga qaytarib bo‘lmaydi.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "DELETE",
+        body: JSON.stringify({ id: txId }),
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Savdo o‘chirilmadi");
+      }
+
+      setClient(await fetchClient(clientId));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Xatolik yuz berdi");
+    }
+  }
+
   function handlePrint() {
     if (typeof window !== "undefined") {
       window.print();
@@ -120,8 +166,15 @@ export default function ClientDetailView({
         </Link>
         <div className="flex gap-2">
           <button 
+            onClick={handleDeleteClient}
+            className="focus-ring flex items-center gap-2 rounded-xl bg-red-950/20 border border-red-500/20 px-4 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors active:scale-95 animate-in fade-in"
+            type="button"
+          >
+            <Trash2 size={14} /> Mijozni o‘chirish
+          </button>
+          <button 
             onClick={handlePrint}
-            className="focus-ring flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-xs font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+            className="focus-ring flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-xs font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors active:scale-95"
             type="button"
           >
             <Printer size={14} /> PDF Invoys
@@ -163,9 +216,8 @@ export default function ClientDetailView({
                   <span className="crm-label">Holat (Status)</span>
                   <select className="crm-select" defaultValue="COMPLETED" name="status">
                     <option value="COMPLETED">Yakunlangan</option>
-                    <option value="ESCROW">Escrowda</option>
-                    <option value="PENDING">Kutilmoqda</option>
                     <option value="DISPUTED">Nizoli</option>
+                    <option value="CANCELLED">Bekor qilingan</option>
                   </select>
                 </label>
 
@@ -212,7 +264,7 @@ export default function ClientDetailView({
       </div>
 
       {/* Main Info Blocks */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
         
         {/* Profile Card */}
         <div className="lg:col-span-2 doppelrand print:border-none print:shadow-none print:bg-transparent">
@@ -260,7 +312,7 @@ export default function ClientDetailView({
       </div>
 
       {/* Transaction History Section */}
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 print:hidden">
         <h2 className="text-lg font-medium text-white/80 print:text-black print:text-base print:border-b print:pb-2 print:border-zinc-300">Xaridlar tarixi</h2>
         
         {client.transactions.length === 0 ? (
@@ -289,10 +341,23 @@ export default function ClientDetailView({
                     <div className="flex items-center gap-4">
                       <div className="flex flex-col items-end">
                         <span className="font-mono text-white/90 font-semibold print:text-black">{formatCurrency(tx.price)}</span>
-                        <span className="font-mono text-xs text-[var(--cs-success)] print:text-emerald-700">+{formatCurrency(netProfit)} foyda</span>
+                        <span className="font-mono text-xs text-[var(--cs-success)] print:text-emerald-700 font-medium">+{formatCurrency(netProfit)} foyda</span>
                       </div>
-                      <div className="w-8 h-8 rounded-full border border-white/5 flex items-center justify-center group-hover:bg-white/10 transition-colors print:hidden">
-                        <ArrowUpRight size={14} className="text-white/40 group-hover:text-white transition-colors" />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteTransaction(tx.id);
+                          }}
+                          className="w-8 h-8 rounded-full border border-red-500/10 bg-red-500/5 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-colors print:hidden active:scale-95"
+                          title="Savdoni o'chirish"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                        <div className="w-8 h-8 rounded-full border border-white/5 flex items-center justify-center group-hover:bg-white/10 transition-colors print:hidden">
+                          <ArrowUpRight size={14} className="text-white/40 group-hover:text-white transition-colors" />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -301,6 +366,83 @@ export default function ClientDetailView({
             })}
           </div>
         )}
+      </div>
+
+      {/* -------------------- PRINT-ONLY INVOICE REPORT -------------------- */}
+      <div className="hidden print:flex flex-col gap-8 w-full text-black bg-white p-4">
+        {/* Corporate header */}
+        <div className="flex justify-between items-start border-b pb-6 border-zinc-200">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-900">ONESTORE</h1>
+            <p className="text-xs text-zinc-500 font-mono mt-1">Savdo Invoysi / Invoice</p>
+          </div>
+          <div className="text-right">
+            <h2 className="text-xl font-bold uppercase tracking-wider text-zinc-700">INVOYS</h2>
+            <p className="text-xs text-zinc-500 mt-1">Sana: {new Date().toLocaleDateString('uz-Latn-UZ')}</p>
+          </div>
+        </div>
+
+        {/* Sender vs Customer Details */}
+        <div className="grid grid-cols-2 gap-8 text-xs">
+          <div>
+            <h3 className="font-semibold text-zinc-500 uppercase tracking-wider mb-2">Yuboruvchi (Seller):</h3>
+            <p className="font-bold text-zinc-800 text-[13px]">OneStore CRM</p>
+            <p className="text-zinc-500 mt-1 font-mono">Telegram: @onestore_admin</p>
+            <p className="text-zinc-500 font-mono">Veb-sayt: www.onestore.uz</p>
+          </div>
+          <div>
+            <h3 className="font-semibold text-zinc-500 uppercase tracking-wider mb-2">Mijoz (Client):</h3>
+            <p className="font-bold text-zinc-800 text-[13px]">{client.name}</p>
+            {client.phone && <p className="text-zinc-500 mt-1 font-mono">Telefon: {client.phone}</p>}
+            {client.telegram && <p className="text-zinc-500 font-mono">Telegram: {client.telegram}</p>}
+            <p className="text-zinc-500 font-mono">Ro‘yxatdan o‘tgan: {formatDate(client.createdAt)}</p>
+          </div>
+        </div>
+
+        {/* Itemized Table */}
+        <div className="mt-4">
+          <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-3">Xarid Qilingan Buyumlar</h3>
+          <table className="w-full border-collapse text-xs text-left">
+            <thead>
+              <tr className="border-b border-zinc-300 text-zinc-500 font-mono">
+                <th className="py-2.5 pr-4 text-left w-10">T/R</th>
+                <th className="py-2.5 pr-4">BUYUM (SKIN)</th>
+                <th className="py-2.5 pr-4">SANA</th>
+                <th className="py-2.5 pr-4">TRADE ID (TRANZAKSIYA)</th>
+                <th className="py-2.5 pr-4 text-center">HOLATI</th>
+                <th className="py-2.5 text-right">NARXI</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-200 text-zinc-800">
+              {client.transactions.map((tx, idx) => (
+                <tr key={tx.id}>
+                  <td className="py-3 pr-4 font-mono text-zinc-400">{idx + 1}</td>
+                  <td className="py-3 pr-4 font-semibold text-zinc-950">{tx.item}</td>
+                  <td className="py-3 pr-4 text-zinc-500">{formatDate(tx.date)}</td>
+                  <td className="py-3 pr-4 font-mono text-zinc-500">{tx.tradeId || '-'}</td>
+                  <td className="py-3 pr-4 text-center">
+                    <span className="text-[10px] font-mono font-semibold px-2.5 py-1 rounded bg-zinc-100 text-zinc-800 border border-zinc-200 uppercase">
+                      {statusLabels[tx.status] || tx.status}
+                    </span>
+                  </td>
+                  <td className="py-3 text-right font-mono font-bold text-zinc-950">{formatCurrency(tx.price)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-zinc-300 font-bold text-zinc-950">
+                <td colSpan={5} className="py-4 text-right uppercase tracking-wider text-[10px] text-zinc-400">Jami xarid hajmi:</td>
+                <td className="py-4 text-right font-mono text-base text-zinc-950">{formatCurrency(client.totalSpent)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* Note section */}
+        <div className="mt-20 pt-6 border-t border-dashed border-zinc-200 text-[10px] text-zinc-400 text-center leading-relaxed">
+          Sotib olingan buyumlar uchun to‘lov tasdiqlandi. Invoys CRM tizimi tomonidan avtomat ravishda chop etildi.<br />
+          Sotuvchi va do‘kon ma‘muriyati nomidan xaridingiz uchun rahmat bildiramiz!
+        </div>
       </div>
 
     </div>

@@ -84,3 +84,51 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json();
+    const { id } = body;
+    if (!id) {
+      return NextResponse.json({ error: 'Tranzaksiya ID majburiy' }, { status: 400 });
+    }
+
+    const transaction = await prisma.transaction.findUnique({
+      where: { id },
+      select: { clientId: true },
+    });
+
+    if (!transaction) {
+      return NextResponse.json({ error: 'Tranzaksiya topilmadi' }, { status: 404 });
+    }
+
+    const { clientId } = transaction;
+
+    await prisma.transaction.delete({
+      where: { id },
+    });
+
+    // Recalculate client totalSpent
+    const completedTransactions = await prisma.transaction.findMany({
+      where: { clientId, status: 'COMPLETED' },
+      select: { price: true },
+    });
+    const totalSpent = completedTransactions.reduce((sum, tx) => sum + tx.price, 0);
+
+    await prisma.client.update({
+      where: { id: clientId },
+      data: {
+        totalSpent,
+        lastSeenAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Savdo o\'chirish xatosi:', error);
+    return NextResponse.json(
+      { error: "Tranzaksiyani o'chirib bo'lmadi. Ma'lumotlar bazasi xatosi." },
+      { status: 500 },
+    );
+  }
+}
