@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef, type TransitionEvent } from "react";
 import Link from "next/link";
 import { 
   ArrowRight, 
@@ -13,8 +13,7 @@ import {
   UsersRound, 
   X, 
   Volume2, 
-  VolumeX, 
-  Clock
+  VolumeX
 } from "lucide-react";
 
 type GiveawayClient = {
@@ -40,6 +39,31 @@ interface Confetti {
   rotation: number;
   rotationSpeed: number;
   opacity: number;
+}
+
+type ReelMetrics = {
+  cardWidth: number;
+  cardGap: number;
+  cardHeight: number;
+};
+
+const REEL_CARD_COUNT = 108;
+const WINNER_TARGET_INDEX = 92;
+const MIN_ROLL_MS = 14500;
+const MAX_ROLL_MS = 18500;
+const REVEAL_FALLBACK_BUFFER_MS = 650;
+const DEFAULT_REEL_METRICS: ReelMetrics = {
+  cardWidth: 200,
+  cardGap: 16,
+  cardHeight: 150,
+};
+
+function metricsForFrame(frameWidth: number): ReelMetrics {
+  const cardWidth = Math.round(Math.min(220, Math.max(148, frameWidth * 0.56)));
+  const cardGap = frameWidth < 520 ? 10 : frameWidth < 820 ? 12 : 16;
+  const cardHeight = frameWidth < 520 ? 128 : 150;
+
+  return { cardWidth, cardGap, cardHeight };
 }
 
 // ----------------------------------------------------
@@ -239,13 +263,14 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
   const [rollCount, setRollCount] = useState(0);
   
   // Configurations (stored in localStorage)
-  const [spinDuration, setSpinDuration] = useState<number>(20);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   
   // Cinema Mode States
   const [cinemaActive, setCinemaActive] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
   const [reelCards, setReelCards] = useState<GiveawayClient[]>([]);
+  const [reelMetrics, setReelMetrics] = useState<ReelMetrics>(DEFAULT_REEL_METRICS);
+  const [rollDurationMs, setRollDurationMs] = useState(16000);
   const [translateX, setTranslateX] = useState(0);
   const [showWinnerCard, setShowWinnerCard] = useState(false);
 
@@ -253,34 +278,29 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const confettiAnimId = useRef<number | null>(null);
   const confettiParticles = useRef<Confetti[]>([]);
-  
-  // Reel measurements
-  const cardWidth = 200;
-  const cardGap = 16;
-  const cardStep = cardWidth + cardGap;
-  const winnerTargetIndex = 85;
 
+  const reelFrameRef = useRef<HTMLDivElement | null>(null);
+  const reelViewportRef = useRef<HTMLDivElement | null>(null);
   const reelRef = useRef<HTMLDivElement | null>(null);
   const frameId = useRef<number | null>(null);
   const lastTickedIndexRef = useRef<number>(-1);
+  const spinStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const targetOffsetRef = useRef(0);
+  const spinFinishedRef = useRef(false);
+  const winnerRef = useRef<GiveawayClient | null>(null);
+  const reelCardsRef = useRef<GiveawayClient[]>([]);
 
   // Load configs from local storage
   useEffect(() => {
-    const savedDuration = localStorage.getItem("giveaway_spin_duration");
     const savedSound = localStorage.getItem("giveaway_sound_enabled");
 
     const timer = setTimeout(() => {
-      if (savedDuration) setSpinDuration(parseInt(savedDuration, 10));
       if (savedSound) setSoundEnabled(savedSound !== "false");
     }, 0);
 
     return () => clearTimeout(timer);
   }, []);
-
-  const handleSetDuration = (duration: number) => {
-    setSpinDuration(duration);
-    localStorage.setItem("giveaway_spin_duration", duration.toString());
-  };
 
   const handleSetSound = (enabled: boolean) => {
     setSoundEnabled(enabled);
@@ -297,10 +317,57 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
     [eligibleClients],
   );
 
+  const sortedEligibleClients = useMemo(
+    () => eligibleClients.slice().sort((a, b) => ticketCount(b) - ticketCount(a)),
+    [eligibleClients],
+  );
+
+  const readViewportWidth = useCallback(() => {
+    if (reelViewportRef.current) return reelViewportRef.current.clientWidth;
+    if (typeof window === "undefined") return 896;
+    return Math.max(320, Math.min(window.innerWidth - 32, 896));
+  }, []);
+
+  const readMarkerOffset = useCallback(() => {
+    if (reelFrameRef.current && reelViewportRef.current) {
+      const frameRect = reelFrameRef.current.getBoundingClientRect();
+      const viewportRect = reelViewportRef.current.getBoundingClientRect();
+
+      return frameRect.left + frameRect.width / 2 - viewportRect.left;
+    }
+
+    return readViewportWidth() / 2;
+  }, [readViewportWidth]);
+
+  const measureCurrentReel = useCallback(() => metricsForFrame(readViewportWidth()), [readViewportWidth]);
+
+  const centerCardOffset = useCallback(
+    (index: number, metrics: ReelMetrics) => {
+      const step = metrics.cardWidth + metrics.cardGap;
+      return readMarkerOffset() - (index * step + metrics.cardWidth / 2);
+    },
+    [readMarkerOffset],
+  );
+
+  const clearSpinTimers = useCallback(() => {
+    if (spinStartTimerRef.current) {
+      clearTimeout(spinStartTimerRef.current);
+      spinStartTimerRef.current = null;
+    }
+    if (revealFallbackTimerRef.current) {
+      clearTimeout(revealFallbackTimerRef.current);
+      revealFallbackTimerRef.current = null;
+    }
+    if (frameId.current) {
+      cancelAnimationFrame(frameId.current);
+      frameId.current = null;
+    }
+  }, []);
+
   // ----------------------------------------------------
   // Confetti Physics Engine
   // ----------------------------------------------------
-  const startConfetti = () => {
+  const startConfetti = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -377,28 +444,67 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
       cancelAnimationFrame(confettiAnimId.current);
     }
     confettiAnimId.current = requestAnimationFrame(animateConfetti);
-  };
+  }, []);
+
+  const finishSpin = useCallback(() => {
+    if (spinFinishedRef.current) return;
+    spinFinishedRef.current = true;
+    clearSpinTimers();
+
+    const targetWinner = reelCardsRef.current[WINNER_TARGET_INDEX] ?? winnerRef.current;
+    if (targetWinner && targetWinner.id !== winnerRef.current?.id) {
+      winnerRef.current = targetWinner;
+      setWinner(targetWinner);
+    }
+
+    setTranslateX(targetOffsetRef.current);
+    setIsSpinning(false);
+    setShowWinnerCard(true);
+    setRollCount((prev) => prev + 1);
+
+    startConfetti();
+    if (soundEnabled) {
+      audioEngine.playFanfare();
+    }
+  }, [clearSpinTimers, soundEnabled, startConfetti]);
+
+  function handleReelTransitionEnd(event: TransitionEvent<HTMLDivElement>) {
+    if (event.target !== reelRef.current || event.propertyName !== "transform" || !isSpinning) return;
+    finishSpin();
+  }
 
   // Recalculate centering when window resizes
   useEffect(() => {
     const handleResize = () => {
       if (cinemaActive && winner && reelCards.length > 0) {
-        const centerX = window.innerWidth / 2;
-        const targetOffset = centerX - (winnerTargetIndex * cardStep + cardWidth / 2);
-        
-        // Match the sizing based on whether it is currently spinning or stopped
         if (!isSpinning) {
+          const nextMetrics = measureCurrentReel();
+          const targetOffset = centerCardOffset(WINNER_TARGET_INDEX, nextMetrics);
+
+          setReelMetrics(nextMetrics);
+          targetOffsetRef.current = targetOffset;
           setTranslateX(targetOffset);
         }
       }
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [cinemaActive, winner, isSpinning, reelCards, cardStep, cardWidth]);
+  }, [centerCardOffset, cinemaActive, isSpinning, measureCurrentReel, reelCards.length, winner]);
+
+  useEffect(() => {
+    return () => {
+      clearSpinTimers();
+      if (confettiAnimId.current) {
+        cancelAnimationFrame(confettiAnimId.current);
+      }
+    };
+  }, [clearSpinTimers]);
 
   // Run the full-screen cinematic randomizer
   function runRandomizer() {
     if (eligibleClients.length === 0 || cinemaActive) return;
+    clearSpinTimers();
+    spinFinishedRef.current = false;
 
     // 1. Synthesize audio contexts on first user gesture
     if (soundEnabled) {
@@ -409,25 +515,29 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
     const selectedWinner = pickWinner(eligibleClients);
     if (!selectedWinner) return;
 
+    const nextDuration = Math.round(MIN_ROLL_MS + secureRandom() * (MAX_ROLL_MS - MIN_ROLL_MS));
+    const initialMetrics = measureCurrentReel();
+    const initialOffset = centerCardOffset(0, initialMetrics);
+
+    winnerRef.current = selectedWinner;
     setWinner(selectedWinner);
     setShowWinnerCard(false);
+    setRollDurationMs(nextDuration);
+    setReelMetrics(initialMetrics);
 
-    // 3. Generate a beautiful, weighted 100-card reel
+    // 3. Generate a weighted reel with the true winner locked to the target slot.
     const tempReel: GiveawayClient[] = [];
-    for (let i = 0; i < 100; i++) {
-      if (i === winnerTargetIndex) {
-        // Place true winner at the target slot
+    for (let i = 0; i < REEL_CARD_COUNT; i++) {
+      if (i === WINNER_TARGET_INDEX) {
         tempReel.push(selectedWinner);
       } else {
-        // Populated weighted random clients to display realistic ticket density
         tempReel.push(pickWeightedClient(eligibleClients));
       }
     }
+    reelCardsRef.current = tempReel;
     setReelCards(tempReel);
 
-    // 4. Position reel at starting offset (centered on card 0)
-    const initialCenterX = typeof window !== "undefined" ? window.innerWidth / 2 : 500;
-    const initialOffset = initialCenterX - cardWidth / 2;
+    // 4. Position reel at the first card. The visible marker is centered against the reel frame.
     setTranslateX(initialOffset);
     
     // 5. Open cinematic mode screen
@@ -436,93 +546,84 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
     lastTickedIndexRef.current = -1;
 
     // 6. Trigger spin transition in the next render frame
-    setTimeout(() => {
-      const centerX = window.innerWidth / 2;
-      const targetOffset = centerX - (winnerTargetIndex * cardStep + cardWidth / 2);
-      
-      setIsSpinning(true);
-      setTranslateX(targetOffset);
+    spinStartTimerRef.current = setTimeout(() => {
+      const liveMetrics = measureCurrentReel();
+      const startOffset = centerCardOffset(0, liveMetrics);
+      const targetOffset = centerCardOffset(WINNER_TARGET_INDEX, liveMetrics);
+      const cardStep = liveMetrics.cardWidth + liveMetrics.cardGap;
 
-      // Start the requestAnimationFrame ticker monitor
-      const monitorTicks = () => {
-        if (reelRef.current) {
-          const rect = reelRef.current.getBoundingClientRect();
-          const reelLeft = rect.left;
-          const markerX = window.innerWidth / 2;
+      setReelMetrics(liveMetrics);
+      setTranslateX(startOffset);
+      targetOffsetRef.current = targetOffset;
 
-          // Compute which card is currently at the center pointer
-          const currentFloatIndex = (markerX - reelLeft - cardWidth / 2) / cardStep;
-          const nearestIndex = Math.round(currentFloatIndex);
+      requestAnimationFrame(() => {
+        setIsSpinning(true);
+        setTranslateX(targetOffset);
 
-          if (nearestIndex !== lastTickedIndexRef.current) {
-            // Play mechanical ticking click sound on crossing
-            if (soundEnabled && nearestIndex >= 0 && nearestIndex < tempReel.length) {
-              audioEngine.playTick();
+        const monitorTicks = () => {
+          if (reelRef.current && reelFrameRef.current) {
+            const reelRect = reelRef.current.getBoundingClientRect();
+            const frameRect = reelFrameRef.current.getBoundingClientRect();
+            const markerX = frameRect.left + frameRect.width / 2;
+            const currentFloatIndex = (markerX - reelRect.left - liveMetrics.cardWidth / 2) / cardStep;
+            const nearestIndex = Math.round(currentFloatIndex);
+
+            if (nearestIndex !== lastTickedIndexRef.current) {
+              if (soundEnabled && nearestIndex >= 0 && nearestIndex < tempReel.length) {
+                audioEngine.playTick();
+              }
+              lastTickedIndexRef.current = nearestIndex;
             }
-            lastTickedIndexRef.current = nearestIndex;
           }
-        }
+
+          frameId.current = requestAnimationFrame(monitorTicks);
+        };
+
         frameId.current = requestAnimationFrame(monitorTicks);
-      };
-      
-      frameId.current = requestAnimationFrame(monitorTicks);
-    }, 60);
-
-    // 7. Schedule stop and reveal
-    setTimeout(() => {
-      // End animation ticks
-      if (frameId.current) {
-        cancelAnimationFrame(frameId.current);
-      }
-      
-      setIsSpinning(false);
-      setShowWinnerCard(true);
-      setRollCount((prev) => prev + 1);
-
-      // Launch particles and fanfare
-      startConfetti();
-      if (soundEnabled) {
-        audioEngine.playFanfare();
-      }
-    }, spinDuration * 1000 + 60);
+        revealFallbackTimerRef.current = setTimeout(finishSpin, nextDuration + REVEAL_FALLBACK_BUFFER_MS);
+      });
+    }, 80);
   }
 
   function resetWinner() {
+    clearSpinTimers();
+    spinFinishedRef.current = false;
+    winnerRef.current = null;
+    reelCardsRef.current = [];
     setWinner(null);
     setCinemaActive(false);
     setIsSpinning(false);
     setShowWinnerCard(false);
     setReelCards([]);
-    if (frameId.current) cancelAnimationFrame(frameId.current);
     if (confettiAnimId.current) cancelAnimationFrame(confettiAnimId.current);
   }
 
   return (
     <div className="flex w-full max-w-full flex-col gap-8 overflow-hidden">
       {/* -------------------- MAIN DISPLAY -------------------- */}
-      <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         
         {/* RANDOMIZER PANEL */}
-        <div className="flex min-w-0 flex-col justify-between rounded-[2rem] border border-white/10 bg-white/[0.025] p-6 md:p-8">
+        <div className="flex min-w-0 flex-col justify-between rounded-[1.5rem] border border-white/10 bg-white/[0.025] p-4 sm:p-6 md:p-8">
           <div>
-            <div className="mb-8 flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-200">
+            <div className="mb-6 flex items-center gap-3 sm:mb-8">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-200 sm:size-11">
                 <Sparkles size={20} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-white/40">OneStore sovrin</p>
-                <h1 className="text-4xl font-semibold tracking-[-0.03em] text-white md:text-5xl">Sovrin tanlash</h1>
+                <h1 className="text-3xl font-semibold tracking-[-0.03em] text-white sm:text-4xl md:text-5xl">Sovrin tanlash</h1>
               </div>
             </div>
 
-            <p className="mb-8 max-w-[56ch] text-sm leading-6 text-white/50">
+            <p className="mb-6 max-w-[56ch] text-sm leading-6 text-white/50 sm:mb-8">
               G&apos;olib yakunlangan xaridi bor mijozlar orasidan tanlanadi. Yangilangan formulamiz chiptalarni xarid soni va jami sarflangan summaga qarab, yuqori xaridorlarga hech qanday cheklovsiz chipta ulashadi.
             </p>
           </div>
 
           {/* STREAM DEMO PREVIEW BOX */}
-          <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-black/35 p-5">
-            <div className="flex items-center justify-between mb-3 text-xs text-white/40">
+          <div className="overflow-hidden rounded-[1.35rem] border border-white/10 bg-black/35 p-4 sm:rounded-[2rem] sm:p-5">
+            <div className="mb-3 flex flex-col gap-1 text-xs text-white/40 sm:flex-row sm:items-center sm:justify-between">
               <span>Mijozlar chiptalari asosida g&apos;oliblik ehtimoli</span>
               <span className="font-mono">{eligibleClients.length} ta faol mijoz</span>
             </div>
@@ -534,7 +635,7 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
                   return (
                     <div 
                       key={client.id} 
-                      className="flex items-center gap-2 rounded-xl border border-white/5 bg-[#121214] px-3 py-1.5 text-xs text-white/80"
+                      className="flex max-w-full items-center gap-2 rounded-xl border border-white/5 bg-[#121214] px-3 py-1.5 text-xs text-white/80"
                     >
                       <span className="font-semibold truncate max-w-[90px]">{client.name}</span>
                       <span className="flex items-center gap-1 rounded bg-red-500/10 px-1.5 py-0.5 font-mono text-[10px] text-red-300">
@@ -551,7 +652,7 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
           </div>
 
           {/* ACTION BUTTONS */}
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row">
             <button
               className="inline-flex flex-1 items-center justify-center gap-3 rounded-2xl border border-red-400/30 bg-red-500 px-5 py-4 text-[15px] font-semibold text-white shadow-[0_18px_55px_rgba(239,68,68,0.22)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-red-400 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]"
               disabled={eligibleClients.length === 0}
@@ -559,7 +660,7 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
               type="button"
             >
               <Shuffle size={18} />
-              G&apos;olibni aniqlash (Cinema)
+              G&apos;olibni aniqlash
             </button>
             <button
               className="inline-flex items-center justify-center gap-3 rounded-2xl border border-white/10 px-5 py-4 text-[15px] font-medium text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white active:scale-[0.98]"
@@ -575,46 +676,19 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
         {/* SIDE PANEL: CONFIGURATIONS & RULES */}
         <aside className="flex flex-col gap-6 min-w-0">
           
-          {/* CONFIGURATIONS CARD */}
+          {/* CONTROL CARD */}
           <div className="doppelrand">
-            <div className="doppelrand-inner p-6 flex flex-col gap-5">
+            <div className="doppelrand-inner flex flex-col gap-5 p-5 sm:p-6">
               <div className="flex items-center gap-2 text-white">
-                <Clock className="text-red-400" size={20} />
-                <h3 className="text-lg font-medium">Randomizator sozlamalari</h3>
+                <Shuffle className="text-red-400" size={20} />
+                <h3 className="text-lg font-medium">Tadbir boshqaruvi</h3>
               </div>
-              
-              {/* duration select */}
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-mono uppercase tracking-wider text-white/40">Aylanish vaqti (soniya)</label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {[10, 20, 40, 60].map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      className={`py-2 px-1 rounded-xl font-mono text-xs border text-center transition-all ${
-                        spinDuration === d 
-                          ? "bg-red-500/10 border-red-500/50 text-red-200 font-semibold"
-                          : "border-white/5 bg-white/[0.02] text-white/50 hover:bg-white/5 hover:text-white"
-                      }`}
-                      onClick={() => handleSetDuration(d)}
-                    >
-                      {d}s {d === 20 ? "(Standart)" : ""}
-                    </button>
-                  ))}
-                </div>
-                
-                {/* range slider */}
-                <div className="mt-2 flex items-center gap-3">
-                  <input
-                    type="range"
-                    min="5"
-                    max="120"
-                    value={spinDuration}
-                    onChange={(e) => handleSetDuration(parseInt(e.target.value, 10))}
-                    className="flex-1 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-red-500"
-                  />
-                  <span className="font-mono text-sm text-red-300 w-8 text-right font-semibold">{spinDuration}s</span>
-                </div>
+
+              <div className="rounded-2xl border border-white/5 bg-white/[0.025] p-4">
+                <p className="text-xs font-semibold text-white/80">Yopiq aylanish rejimi</p>
+                <p className="mt-1 text-[11px] leading-5 text-white/40">
+                  Aylanish uzunligi tomoshabinlarga ko&apos;rsatilmaydi. Natija faqat marker g&apos;olib kartasiga aniq qulflangandan keyin ochiladi.
+                </p>
               </div>
 
               {/* Sound Toggle */}
@@ -701,7 +775,55 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
             <span className="w-max rounded bg-white/5 px-2 py-1 font-mono text-xs text-white/40">{eligibleClients.length} ta faol</span>
           </div>
 
-          <div className="custom-scrollbar overflow-x-auto">
+          <div className="grid gap-3 md:hidden">
+            {sortedEligibleClients.map((client) => {
+              const bd = getTicketBreakdown(client);
+              const probability = totalTickets > 0 ? Math.round((bd.total / totalTickets) * 100) : 0;
+
+              return (
+                <article className="rounded-2xl border border-white/5 bg-white/[0.025] p-4" key={client.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link className="truncate text-base font-semibold text-white transition-colors hover:text-red-300" href={`/clients/${client.id}`}>
+                        {client.name}
+                      </Link>
+                      <p className="mt-1 truncate font-mono text-[11px] text-white/40">{client.telegram || client.phone || "-"}</p>
+                    </div>
+                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 font-mono text-xs text-red-200">
+                      <Ticket size={12} />
+                      {bd.total}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-xl bg-white/[0.025] p-3">
+                      <span className="block text-white/35">Xarid</span>
+                      <strong className="mt-1 block font-mono text-white">{formatUsd(client.totalSpent)}</strong>
+                    </div>
+                    <div className="rounded-xl bg-white/[0.025] p-3">
+                      <span className="block text-white/35">Soni</span>
+                      <strong className="mt-1 block font-mono text-white">{bd.completedTrades} ta</strong>
+                    </div>
+                    <div className="rounded-xl bg-white/[0.025] p-3">
+                      <span className="block text-white/35">Imkon</span>
+                      <strong className="mt-1 block font-mono text-white">{probability}%</strong>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/5">
+                    <div className="h-full rounded-full bg-red-500" style={{ width: `${probability}%`, backgroundColor: "var(--cs-accent)" }} />
+                  </div>
+                </article>
+              );
+            })}
+            {eligibleClients.length === 0 && (
+              <div className="rounded-2xl border border-white/5 bg-white/[0.025] p-8 text-center font-mono text-xs text-white/35">
+                Faol ishtirokchilar mavjud emas. Mijozning kamida bitta yakunlangan xaridi bo&apos;lishi shart.
+              </div>
+            )}
+          </div>
+
+          <div className="custom-scrollbar hidden overflow-x-auto md:block">
             <table className="w-full min-w-[850px] border-collapse text-left text-sm text-white/70">
               <thead>
                 <tr className="border-b border-white/5 font-mono text-[11px] uppercase tracking-widest text-white/35">
@@ -715,9 +837,7 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {eligibleClients
-                  .slice()
-                  .sort((a, b) => ticketCount(b) - ticketCount(a))
+                {sortedEligibleClients
                   .map((client) => {
                     const bd = getTicketBreakdown(client);
                     const probability = totalTickets > 0 ? Math.round((bd.total / totalTickets) * 100) : 0;
@@ -780,27 +900,27 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
 
       {/* -------------------- CINEMA SPIN OVERLAY -------------------- */}
       {cinemaActive && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-neutral-950/98 p-4 backdrop-blur-3xl transition-opacity duration-300">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-neutral-950/98 px-3 py-4 backdrop-blur-3xl transition-opacity duration-300 sm:p-6">
           <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[120]" />
           
-          <div className="relative flex w-full max-w-7xl flex-col items-center justify-center gap-10">
+          <div className="relative mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-7xl flex-col items-center justify-center gap-5 sm:min-h-[calc(100dvh-3rem)] sm:gap-8">
             
             {/* Upper Header: suspense states */}
-            <div className="text-center flex flex-col items-center gap-3">
-              <div className="animate-pulse flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/5 px-4 py-1 text-xs font-semibold text-red-300 uppercase tracking-widest">
+            <div className="flex max-w-3xl flex-col items-center gap-2 text-center sm:gap-3" aria-live="polite">
+              <div className="flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-red-300 sm:px-4 sm:text-xs">
                 <Sparkles size={12} className="text-red-400" />
                 {isSpinning ? "Omadli g'olib aniqlanmoqda" : showWinnerCard ? "G'olib aniqlandi!" : "Tayyorlanmoqda..."}
               </div>
-              <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight leading-none mt-2">
+              <h2 className="mt-1 text-2xl font-bold leading-tight tracking-tight text-white sm:mt-2 sm:text-4xl md:text-5xl">
                 OneStore Omadli Mijoz
               </h2>
-              <p className="text-sm text-white/40 max-w-[50ch]">
-                {isSpinning ? "Chipta ulushlari bo'yicha aylanish jarayoni yakunlanishini kuting..." : "Tadbir muvaffaqiyatli yakunlandi!"}
+              <p className="max-w-[50ch] text-xs leading-5 text-white/40 sm:text-sm">
+                {isSpinning ? "Marker bitta kartaga qulflanmaguncha natija ochilmaydi." : "Tadbir muvaffaqiyatli yakunlandi!"}
               </p>
             </div>
 
             {/* THE HORIZONTAL REEL SPINNER CONTAINER */}
-            <div className="relative w-full max-w-4xl overflow-hidden rounded-[2.5rem] border border-white/10 bg-[#0d0d0f]/80 py-12 px-2 shadow-2xl backdrop-blur-xl">
+            <div ref={reelFrameRef} className="relative w-full max-w-5xl overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#0d0d0f]/80 px-2 py-7 shadow-2xl backdrop-blur-xl sm:rounded-[2rem] sm:py-10 lg:rounded-[2.5rem] lg:py-12">
               
               {/* Pointer Center Indicator (vertical bar) */}
               <div className="absolute top-0 bottom-0 left-1/2 z-30 w-1 -translate-x-1/2 pointer-events-none">
@@ -810,31 +930,32 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
               </div>
 
               {/* Gradient overlays to shade the left and right edges */}
-              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-36 bg-gradient-to-r from-[#0d0d0f] to-transparent" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-36 bg-gradient-to-l from-[#0d0d0f] to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-14 bg-gradient-to-r from-[#0d0d0f] to-transparent sm:w-28" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-14 bg-gradient-to-l from-[#0d0d0f] to-transparent sm:w-28" />
 
               {/* Scrolling tape */}
-              <div className="w-full overflow-hidden">
+              <div ref={reelViewportRef} className="w-full overflow-hidden">
                 <div
                   ref={reelRef}
-                  className="flex items-center select-none"
+                  className="flex select-none items-center"
+                  onTransitionEnd={handleReelTransitionEnd}
                   style={{
-                    gap: `${cardGap}px`,
+                    gap: `${reelMetrics.cardGap}px`,
                     transform: `translateX(${translateX}px)`,
-                    transition: isSpinning ? `transform ${spinDuration}s cubic-bezier(0.06, 0.8, 0.15, 1)` : "none",
-                    willChange: "transform",
+                    transition: isSpinning ? `transform ${rollDurationMs}ms cubic-bezier(0.06, 0.8, 0.15, 1)` : "none",
+                    willChange: isSpinning ? "transform" : "auto",
                     width: "max-content"
                   }}
                 >
                   {reelCards.map((client, idx) => {
-                    const isWinnerIdx = idx === winnerTargetIndex;
+                    const isWinnerIdx = idx === WINNER_TARGET_INDEX;
                     const isStopped = !isSpinning && showWinnerCard;
                     
                     return (
                       <div
                         key={`${client.id}-${idx}`}
-                        style={{ width: `${cardWidth}px` }}
-                        className={`h-[150px] shrink-0 rounded-2xl border bg-gradient-to-b p-5 flex flex-col justify-between transition-all duration-700 ${
+                        style={{ width: `${reelMetrics.cardWidth}px`, height: `${reelMetrics.cardHeight}px` }}
+                        className={`flex shrink-0 flex-col justify-between rounded-2xl border bg-gradient-to-b p-4 transition-all duration-700 sm:p-5 ${
                           isWinnerIdx && isStopped
                             ? "border-amber-500 bg-amber-950/20 shadow-[0_0_35px_rgba(245,158,11,0.5)] scale-105 z-10"
                             : "border-white/10 bg-neutral-900/50"
@@ -873,21 +994,13 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
               </div>
             </div>
 
-            {/* Countdown / Progress slider */}
             {isSpinning && (
-              <div className="w-full max-w-md flex flex-col gap-1.5 items-center">
-                <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-red-500"
-                    style={{
-                      width: "100%",
-                      animation: `giveaway-countdown ${spinDuration}s linear forwards`
-                    }}
-                  />
-                </div>
-                <span className="text-[10px] font-mono text-white/35 uppercase tracking-widest mt-1">
-                  Aylanish vaqti: {spinDuration} soniya
+              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-[10px] font-mono uppercase tracking-[0.18em] text-white/35">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-400 opacity-60" />
+                  <span className="relative inline-flex size-2 rounded-full bg-red-400" />
                 </span>
+                Natija yopiq rejimda qulflanmoqda
               </div>
             )}
 
@@ -897,7 +1010,7 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
                 <div className="absolute inset-0 -z-10 rounded-[2.5rem] bg-amber-500/5 blur-[80px]" />
                 
                 <div className="doppelrand">
-                  <div className="doppelrand-inner flex flex-col gap-6 p-7 md:p-8 bg-[#0a0a0c]">
+                  <div className="doppelrand-inner flex flex-col gap-5 bg-[#0a0a0c] p-5 sm:gap-6 sm:p-7 md:p-8">
                     
                     <button
                       aria-label="Yopish"
@@ -908,17 +1021,17 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
                       <X size={18} />
                     </button>
 
-                    <div className="flex items-center gap-4">
-                      <div className="flex size-14 items-center justify-center rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                    <div className="flex items-center gap-3 pr-12 sm:gap-4">
+                      <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-300 sm:size-14">
                         <Trophy size={28} className="animate-pulse" />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-amber-400 font-semibold">Tadbir g&apos;olibi</p>
-                        <h3 className="text-3xl font-bold tracking-tight text-white mt-0.5">{winner.name}</h3>
+                        <h3 className="mt-0.5 truncate text-2xl font-bold tracking-tight text-white sm:text-3xl">{winner.name}</h3>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div className="mt-2 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
                         <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-white/40">Jami chiptalar</p>
                         <strong className="font-mono text-2xl text-white block">{ticketCount(winner)} ta</strong>
@@ -946,7 +1059,7 @@ export default function GiveawayRandomizer({ clients }: GiveawayRandomizerProps)
                       </div>
                     </div>
 
-                    <div className="mt-4 flex gap-3">
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                       <Link
                         className="inline-flex flex-1 items-center justify-center gap-2.5 rounded-2xl bg-white px-5 py-4 text-[15px] font-semibold text-black transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/90 active:scale-[0.98]"
                         href={`/clients/${winner.id}`}

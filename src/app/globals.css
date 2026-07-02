@@ -162,15 +162,6 @@
   animation: winner-lock 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-@keyframes giveaway-countdown {
-  0% {
-    width: 100%;
-  }
-  100% {
-    width: 0%;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
