@@ -47,8 +47,6 @@ const statusLabels: Record<string, string> = {
   CANCELLED: "Bekor qilingan",
 };
 
-const rarityOptions = ["Mil-Spec", "Restricted", "Classified", "Covert", "Contraband"];
-
 async function fetchClient(clientId: string) {
   const res = await fetch(`/api/clients/${clientId}`);
   if (!res.ok) throw new Error('Mijoz yuklanmadi');
@@ -161,45 +159,15 @@ export default function ClientDetailView({
                   </label>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <label>
-                    <span className="crm-label">Kamlik (Rarity)</span>
-                    <select className="crm-select" defaultValue="Restricted" name="rarity">
-                      {rarityOptions.map((rarity) => (
-                        <option key={rarity} value={rarity}>{rarity}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span className="crm-label">Holat (Status)</span>
-                    <select className="crm-select" defaultValue="COMPLETED" name="status">
-                      <option value="COMPLETED">Yakunlangan</option>
-                      <option value="ESCROW">Escrowda</option>
-                      <option value="PENDING">Kutilmoqda</option>
-                      <option value="DISPUTED">Nizoli</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <label>
-                    <span className="crm-label">To‘lov usuli</span>
-                    <select className="crm-select" defaultValue="USDT TRC20" name="paymentMethod">
-                      <option value="USDT TRC20">USDT TRC20</option>
-                      <option value="Card">Karta</option>
-                      <option value="Cash">Naqd</option>
-                      <option value="Steam Balance">Steam balans</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span className="crm-label">Kanal</span>
-                    <select className="crm-select" defaultValue="Telegram" name="channel">
-                      <option value="Telegram">Telegram</option>
-                      <option value="Store">Do‘kon</option>
-                      <option value="Website">Sayt</option>
-                    </select>
-                  </label>
-                </div>
+                <label>
+                  <span className="crm-label">Holat (Status)</span>
+                  <select className="crm-select" defaultValue="COMPLETED" name="status">
+                    <option value="COMPLETED">Yakunlangan</option>
+                    <option value="ESCROW">Escrowda</option>
+                    <option value="PENDING">Kutilmoqda</option>
+                    <option value="DISPUTED">Nizoli</option>
+                  </select>
+                </label>
 
                 <div className="grid grid-cols-2 gap-4">
                   <label>

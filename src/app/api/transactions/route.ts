@@ -30,9 +30,6 @@ export async function POST(request: Request) {
       buyPrice, // Buy Price
       tradeId,
       status, // COMPLETED, ESCROW, PENDING, DISPUTED, CANCELLED
-      rarity,
-      paymentMethod,
-      channel,
       floatValue,
     } = body;
 
@@ -56,9 +53,9 @@ export async function POST(request: Request) {
         marginUsd,
         tradeId: tradeId || null,
         status: status || 'COMPLETED',
-        rarity: rarity || 'Restricted',
-        paymentMethod: paymentMethod || 'Card',
-        channel: channel || 'Telegram',
+        rarity: 'Restricted',
+        paymentMethod: 'Card',
+        channel: 'CRM',
         floatValue: floatValue ? parseFloat(floatValue) : null,
       },
     });

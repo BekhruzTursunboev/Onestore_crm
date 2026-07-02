@@ -129,8 +129,7 @@ export default function DashboardCommandCenter({ clients, trades, generatedAtLab
         const matchesPriority =
           priorityFilter === "ALL" ||
           (priorityFilter === "HIGH_VALUE" && trade.price >= 1000) ||
-          (priorityFilter === "REVIEW" && ["DISPUTED", "ESCROW", "PENDING"].includes(trade.status)) ||
-          (priorityFilter === "USDT" && trade.paymentMethod.toLowerCase().includes("usdt"));
+          (priorityFilter === "REVIEW" && ["DISPUTED", "ESCROW", "PENDING"].includes(trade.status));
         if (!matchesPriority) return false;
         if (!normalized) return true;
 
@@ -166,7 +165,6 @@ export default function DashboardCommandCenter({ clients, trades, generatedAtLab
     { value: "ALL", label: "Barchasi", count: trades.length },
     { value: "HIGH_VALUE", label: "Katta savdolar ($1k+)", count: trades.filter((trade) => trade.price >= 1000).length },
     { value: "REVIEW", label: "Tekshiruvdagilar", count: trades.filter((trade) => ["DISPUTED", "ESCROW", "PENDING"].includes(trade.status)).length },
-    { value: "USDT", label: "USDT to‘lov", count: trades.filter((trade) => trade.paymentMethod.toLowerCase().includes("usdt")).length },
   ];
 
   function clearFilters() {
